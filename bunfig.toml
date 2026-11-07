@@ -1,4 +1,8 @@
 [install]
+# Jarvis: disable dependency lifecycle scripts and telemetry.
+ignoreScripts = true
+# Jarvis: prevent automatic dependency installation at runtime.
+auto = "disable"
 exact = true
 # Only install newly resolved package versions published at least 3 days ago.
 minimumReleaseAge = 259200

@@ -544,7 +544,9 @@ export const layer = (options?: Options) =>
       )
 
       const source = options?.url || defaultSource
-      const fetch = options?.fetch ?? true
+      // Jarvis local-only: preserve upstream configuration for reference.
+      // const fetch = options?.fetch ?? true
+      const fetch = false
       const userAgent = App.useragent(app)
       const key = cacheKey(source)
       const metaKey = `${key}:meta`
@@ -658,6 +660,8 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+        // Jarvis local-only: explicit refresh must not initiate network traffic.
+        if (!fetch) return
         yield* lock
           .withPermit(
             Effect.gen(function* () {

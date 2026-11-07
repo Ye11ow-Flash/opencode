@@ -257,7 +257,13 @@ const make = Effect.gen(function* () {
     return commands[method]
   }
 
+  // Jarvis local-only: shared guard for all updater operations.
+  const jarvisDisableUpdaterNetwork = true
+
   const removal = (method: Method) => {
+    // Jarvis local-only: do not expose package-uninstall commands.
+    if (jarvisDisableUpdaterNetwork) return undefined
+
     const command = removalCommand(method)
     if (!command) return undefined
     return {
@@ -273,6 +279,8 @@ const make = Effect.gen(function* () {
   }
 
   const release = Effect.fnUntraced(function* (method?: Method) {
+    if (jarvisDisableUpdaterNetwork)
+      return yield* Effect.fail(new Error("Jarvis local-only: release lookup is disabled."))
     const distribution = method === "brew" ? "homebrew" : "npm"
     // Homebrew Core builds its formula on its own schedule, so the tap release does not describe it.
     const core = method === "brew" && installedFormula === "opencode"
@@ -332,6 +340,8 @@ const make = Effect.gen(function* () {
 
   // WinGet moderates every submission, so only its own index knows which release it can install.
   const wingetVersion = Effect.fnUntraced(function* () {
+    if (jarvisDisableUpdaterNetwork)
+      return yield* Effect.fail(new Error("Jarvis local-only: version discovery is disabled."))
     const failure = (detail: string, cause?: unknown) =>
       new UpgradeError(
         {
@@ -359,7 +369,9 @@ const make = Effect.gen(function* () {
   })
 
   const latest = (selected?: Method) =>
-    (selected ? Effect.succeed(selected) : method()).pipe(
+    jarvisDisableUpdaterNetwork
+      ? Effect.fail(new Error("Jarvis local-only: update discovery is disabled."))
+      : (selected ? Effect.succeed(selected) : method()).pipe(
       Effect.flatMap((method) =>
         method === "winget" ? wingetVersion() : release(method).pipe(Effect.map((data) => data.version)),
       ),
@@ -423,6 +435,9 @@ const make = Effect.gen(function* () {
   }
 
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
+    // Jarvis local-only: do not run remote installers or package managers.
+    if (jarvisDisableUpdaterNetwork)
+      return yield* Effect.fail(new Error("Jarvis local-only: upgrades are disabled."))
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
     const packageName =
@@ -531,7 +546,15 @@ const make = Effect.gen(function* () {
     )
   })
 
+  // Jarvis local-only: original updater logic preserved below for reference.
+
   const inspect = Effect.fnUntraced(function* () {
+    if (jarvisDisableUpdaterNetwork) {
+      yield* Effect.logInfo("update check skipped", {
+        reason: "jarvis-local-only",
+      })
+      return undefined
+    }
     if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")) {
       yield* Effect.logInfo("update check skipped", {
         reason: OPENCODE_LOCAL ? "local-install" : "disabled",
@@ -575,6 +598,8 @@ const make = Effect.gen(function* () {
   })
 
   const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
+    if (jarvisDisableUpdaterNetwork)
+      return yield* Effect.fail(new Error("Jarvis local-only: update installation is disabled."))
     if (!(yield* install(version)))
       return yield* Effect.fail(
         new Error(
@@ -584,6 +609,13 @@ const make = Effect.gen(function* () {
   })
 
   const check = Effect.fn("cli.updater.check")(function* () {
+    // Jarvis local-only: prevent explicit version checks from accessing the network.
+    if (jarvisDisableUpdaterNetwork) {
+      return {
+        type: "unavailable" as const,
+        message: "Update checks are disabled in the Jarvis local-only build.",
+      }
+    }
     if (OPENCODE_LOCAL)
       return {
         type: "unavailable" as const,

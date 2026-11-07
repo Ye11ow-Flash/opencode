@@ -243,6 +243,58 @@ const initialState: MockState = {
 }
 
 describe("ModelsDev Service", () => {
+
+  it.live("Jarvis local-only blocks fetch even when explicitly enabled", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const state = yield* Ref.make<MockState>({ ...initialState, calls: [] })
+
+      const result = yield* ModelsDev.Service.use((service) =>
+        service.get(),
+      ).pipe(
+        Effect.provide(
+          buildLayer(state, cache, {
+            fetch: true,
+            snapshot: false,
+          }),
+        ),
+      )
+
+      expect(result).toEqual([])
+      expect((yield* Ref.get(state)).calls).toEqual([])
+    }),
+  )
+
+  it.live("Jarvis local-only blocks forced refresh and preserves cached data", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, fixture)
+
+      const state = yield* Ref.make<MockState>({ ...initialState, calls: [] })
+
+      const result = yield* ModelsDev.Service.use((service) =>
+        Effect.gen(function* () {
+          const before = yield* service.get()
+          yield* service.refresh(true)
+          const after = yield* service.get()
+
+          return { before, after }
+        }),
+      ).pipe(
+        Effect.provide(
+          buildLayer(state, cache, {
+            fetch: true,
+            snapshot: false,
+          }),
+        ),
+      )
+
+      expect(result.before).toEqual(fixtureSnapshot)
+      expect(result.after).toEqual(fixtureSnapshot)
+      expect((yield* Ref.get(state)).calls).toEqual([])
+    }),
+  )
+
   it.live("get() returns normalized snapshots from KV when a cache entry exists", () =>
     Effect.gen(function* () {
       const cache = makeCache()
